@@ -16,8 +16,15 @@ const markers = "markers"
 const process = "process"
 const attribute = "attribute"
 const object = "object"
+const eof = "EOF"
 const start = 0
 const end = 1
+
+//Item is what the using package will get through the channel
+type Item struct {
+	ItemKey   string
+	ItemValue string
+}
 
 type lexer struct {
 	name       string     //name of the lexer for error reporting
@@ -32,16 +39,11 @@ type lexer struct {
 	attribEnd  []string   //it is the end of the attribute marker
 	object     string     //put key here to check for the right end key
 	attribute  string     //put key here to check for the right end key
+	items      chan Item
 }
 type stateFn func(*lexer) stateFn
 
 //Element is exported so others can use it as a type for pointer
-type element struct {
-	VarPart  map[string]string
-	OutNodes []string //sequenceFlow ID
-	InNodes  []string //sequenceFlow ID
-	ToLinks  []int
-}
 
 var lexerData lexer
 var l = &lexerData
@@ -49,17 +51,14 @@ var searchList []string
 var orderPat []string             //order of hierarchy
 var itemPat map[string][]string   //objects in each element of the hirearchy
 var markerPat map[string][]string //start and end attributes of all search items
-var currNode element
 
 //AllNodes is the final output of the lexer
-var AllNodes []element
 
 func lexText(l *lexer) stateFn {
 	for {
 		//searchList is one of the list of the marker patterns
 		//item is item in the list that matched the prefix
 		ok, item := l.hasPrefix(l.input[l.pos:], searchList)
-		// fmt.Println("item: ", item, searchList)
 		if ok {
 			if l.pos >= l.start {
 				//key is the process, object or attribute of the matched item
@@ -85,6 +84,7 @@ func lexText(l *lexer) stateFn {
 			break
 		}
 	}
+	l.emit(eof, "")
 	return nil
 }
 
@@ -98,11 +98,12 @@ func (l *lexer) processStarts(key string) {
 		searchList = l.objects
 		return
 	case object:
-		if _, ok := currNode.VarPart["nodeType"]; !ok {
-			currNode.VarPart = map[string]string{"nodeType": key}
-		} else {
-			currNode.VarPart["nodeType"] = key
-		}
+		l.emit("nodeType", key)
+		// if _, ok := currNode.VarPart["nodeType"]; !ok {
+		// 	currNode.VarPart = map[string]string{"nodeType": key}
+		// } else {
+		// 	currNode.VarPart["nodeType"] = key
+		// }
 		l.object = key
 		searchList = l.attributes
 		return
@@ -123,21 +124,13 @@ func (l *lexer) processEnds(key string) {
 	case process:
 		return
 	case object:
-		AllNodes = append(AllNodes, currNode)
-		currNode = element{}
+		l.emit(object, "")
 		searchList = l.objects
 		l.object = ""
 		return
 	case attribute:
 		searchList = l.attributes
-		load := l.input[l.start:l.pos]
-		currNode.VarPart[key] = load
-		switch key {
-		case "incoming":
-			currNode.InNodes = append(currNode.InNodes, load)
-		case "outgoing":
-			currNode.OutNodes = append(currNode.OutNodes, load)
-		}
+		l.emit(key, l.input[l.start:l.pos])
 	}
 	return
 }
@@ -146,6 +139,7 @@ func (l *lexer) run() {
 	for state := lexText; state != nil; {
 		state = state(l)
 	}
+	close(l.items)
 }
 
 func (l *lexer) next() bool {
@@ -163,6 +157,10 @@ func (l *lexer) advance(prefix string) {
 	l.pos += len(prefix)
 	l.start = l.pos
 	return
+}
+
+func (l *lexer) emit(itemKey string, itemValue string) {
+	l.items <- Item{itemKey, itemValue}
 }
 
 func (l *lexer) hasPrefix(input string, pat []string) (bool, string) {
@@ -349,15 +347,17 @@ func (l *lexer) setEnd(en string) {
 }
 
 //Lex is the starting point of lexer
-func Lex(pattern [][]string, input string) {
+func Lex(pattern [][]string, input string) chan Item {
 	l := &lexer{
 		input:   input,
 		pattern: pattern,
+		items:   make(chan Item),
 	}
 	orderPat = l.getOrder()
 	itemPat = l.getItems()
 	markerPat = l.getMarkers()
 	l.setSearch()
 	searchList = l.process
-	l.run()
+	go l.run()
+	return l.items
 }

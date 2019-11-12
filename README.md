@@ -1,5 +1,26 @@
 # lexer
 
+Update:  The content of the "previous note" (below) are still good.  This
+update is document one of the changes I said I will make in the future.
+The shared data structure is replaced with a new API.  The Lex function
+now returns a channel that sends the data to the user.  The form of this data
+is:
+type Item struct {
+	ItemKey   string
+	ItemValue string
+}
+
+There are three types of items in the pattern csv file.  They are process,
+object, and attribute.  Process delimiters start and stop the lexing.  They
+do not cause any symbols to be emitted.  An "EOF" string is emitted as ItemKey
+with an empty string when end of input is encountered.  When an object delimiter
+is encountered, nodeType is emitted.  For attributes, the first field of the
+csv pattern file and the found attribute are emitted.
+
+The inputs to the Lex function have not changed.
+
+Previous note:
+
 This lexer is based on the Rob Pike talk in Australia.  I built a few
 specialized lexers for specific needs and then decided to generalize
 some of the ideas.  Clearly, more work can be done.
