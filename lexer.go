@@ -99,11 +99,6 @@ func (l *lexer) processStarts(key string) {
 		return
 	case object:
 		l.emit("nodeType", key)
-		// if _, ok := currNode.VarPart["nodeType"]; !ok {
-		// 	currNode.VarPart = map[string]string{"nodeType": key}
-		// } else {
-		// 	currNode.VarPart["nodeType"] = key
-		// }
 		l.object = key
 		searchList = l.attributes
 		return
