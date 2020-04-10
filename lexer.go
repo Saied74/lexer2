@@ -159,13 +159,19 @@ func (l *lexer) emit(itemKey string, itemValue string) {
 }
 
 func (l *lexer) hasPrefix(input string, pat []string) (bool, string) {
+	candidate := ""
 	for _, item := range pat {
 		if strings.HasPrefix(input, item) {
-			if ok, _, _ := l.findKey(item); !ok {
-				return false, ""
+			if len(item) > len(candidate) {
+				candidate = item
 			}
-			return true, item
 		}
+	}
+	if len(candidate) > 0 {
+		if ok, _, _ := l.findKey(candidate); !ok {
+			return false, ""
+		}
+		return true, candidate
 	}
 	return false, ""
 }
